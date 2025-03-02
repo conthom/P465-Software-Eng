@@ -132,10 +132,70 @@ def interactive_mode():
             else:
                 input("Invalid input. Press Enter to continue...")
 
+def safe_addstr(window, y, x, text, attr=0):
+    """Safely add a string to a curses window, handling encoding issues."""
+    try:
+        window.addstr(y, x, text, attr)
+    except curses.error as e:
+        # Try to add the string without special characters
+        try:
+            # Replace non-ASCII characters with '?'
+            safe_text = ''.join(c if ord(c) < 128 else '?' for c in text)
+            window.addstr(y, x, safe_text, attr)
+        except curses.error:
+            # If still failing, truncate the string to fit
+            try:
+                height, width = window.getmaxyx()
+                if x < width:
+                    max_len = width - x - 1
+                    truncated = safe_text[:max_len]
+                    window.addstr(y, x, truncated, attr)
+            except:
+                pass  # Give up if all else fails
+
+def init_colors():
+    """Initialize color pairs for curses."""
+    # Initialize color pairs
+    curses.init_pair(1, curses.COLOR_WHITE, -1)  # Default text
+    curses.init_pair(2, curses.COLOR_GREEN, -1)  # Headers
+    curses.init_pair(3, curses.COLOR_YELLOW, -1)  # Highlighted items
+    curses.init_pair(4, curses.COLOR_RED, -1)  # Important values
+    curses.init_pair(5, curses.COLOR_CYAN, -1)  # Secondary information
+    
+    # Define color constants
+    global COLOR_DEFAULT, COLOR_HEADER, COLOR_HIGHLIGHT, COLOR_IMPORTANT, COLOR_INFO
+    COLOR_DEFAULT = curses.color_pair(1)
+    COLOR_HEADER = curses.color_pair(2) | curses.A_BOLD
+    COLOR_HIGHLIGHT = curses.color_pair(3)
+    COLOR_IMPORTANT = curses.color_pair(4)
+    COLOR_INFO = curses.color_pair(5)
+
+def init_curses():
+    """Initialize curses with proper settings."""
+    # Start color support
+    curses.start_color()
+    curses.use_default_colors()
+    
+    # Initialize colors
+    init_colors()
+    
+    # Hide cursor
+    curses.curs_set(0)
+    
+    # Set up key handling
+    curses.meta(1)  # Allow 8-bit input
+    curses.raw()    # Disable line buffering
+    
+    # Define special keys
+    curses.keyname(8)  # Ensure backspace is recognized
+    curses.keyname(127)  # Ensure delete is recognized
+    curses.keyname(curses.KEY_BACKSPACE)  # Ensure KEY_BACKSPACE is recognized
+
 def curses_main(stdscr):
-    # Initialize curses
-    curses.curs_set(0)  # Hide cursor
+    # Initialize curses with proper settings
+    init_curses()
     stdscr.clear()
+    stdscr.refresh()  # Initial refresh
     
     # Get terminal dimensions
     height, width = stdscr.getmaxyx()
@@ -163,29 +223,30 @@ def curses_main(stdscr):
         status_win.clear()
         
         # Draw header
-        header_win.addstr(0, 0, "Angband Monster Browser", curses.A_BOLD)
-        header_win.addstr(1, 0, "=" * (width - 1))
+        safe_addstr(header_win, 0, 0, "Angband Monster Editor", COLOR_HEADER)
+        safe_addstr(header_win, 1, 0, "=" * (width - 1), COLOR_DEFAULT)
         
         # Draw monster list
         list_height = height - 6
         for i in range(min(list_height, len(current_monsters) - offset)):
             monster = current_monsters[offset + i]
             if offset + i == current_pos:
-                list_win.addstr(i, 0, f"> {monster['name']}", curses.A_REVERSE)
+                safe_addstr(list_win, i, 0, f"> {monster['name']}", curses.A_REVERSE)
             else:
-                list_win.addstr(i, 0, f"  {monster['name']}")
+                safe_addstr(list_win, i, 0, f"  {monster['name']}", COLOR_DEFAULT)
         
         # Draw status
-        status_win.addstr(0, 0, "=" * (width - 1))
+        safe_addstr(status_win, 0, 0, "=" * (width - 1), COLOR_DEFAULT)
         if search_mode:
-            status_win.addstr(1, 0, f"Search: {search_string}")
+            safe_addstr(status_win, 1, 0, f"Search: {search_string}", COLOR_HIGHLIGHT)
         else:
-            status_win.addstr(1, 0, "q:Quit  s:Search  Enter:View Details  j/k:Navigate")
+            safe_addstr(status_win, 1, 0, "q:Quit  s:Search  Enter:View Details  j/k:Navigate", COLOR_INFO)
         
         # Refresh windows
         header_win.refresh()
         list_win.refresh()
         status_win.refresh()
+        stdscr.refresh()  # Ensure the main screen is refreshed too
         
         # Get input
         key = stdscr.getch()
@@ -203,10 +264,21 @@ def curses_main(stdscr):
                         current_pos = 0
                         offset = 0
                 search_string = ""
-            elif key == 8 or key == 127:  # Backspace
-                search_string = search_string[:-1]
+            elif key == 8 or key == 127 or key == curses.KEY_BACKSPACE:  # Backspace (multiple possible key codes)
+                if search_string:
+                    search_string = search_string[:-1]
+                    # Redraw immediately to show the change
+                    status_win.clear()
+                    safe_addstr(status_win, 0, 0, "=" * (width - 1), COLOR_DEFAULT)
+                    safe_addstr(status_win, 1, 0, f"Search: {search_string}", COLOR_HIGHLIGHT)
+                    status_win.refresh()
             elif 32 <= key <= 126:  # Printable characters
                 search_string += chr(key)
+                # Redraw immediately to show the change
+                status_win.clear()
+                safe_addstr(status_win, 0, 0, "=" * (width - 1), COLOR_DEFAULT)
+                safe_addstr(status_win, 1, 0, f"Search: {search_string}", COLOR_HIGHLIGHT)
+                status_win.refresh()
         else:
             if key == ord('q'):
                 break
@@ -231,60 +303,71 @@ def curses_main(stdscr):
                     detail_win.clear()
                     
                     # Display monster details
-                    detail_win.addstr(0, 0, f"Monster Details: {monster['name']}", curses.A_BOLD)
-                    detail_win.addstr(1, 0, "=" * (width - 1))
+                    safe_addstr(detail_win, 0, 0, f"Monster Details: {monster['name']}", COLOR_HEADER)
+                    safe_addstr(detail_win, 1, 0, "=" * (width - 1), COLOR_DEFAULT)
                     
                     line = 3
-                    detail_win.addstr(line, 0, f"Speed: {monster.get('speed', 'Unknown')}")
+                    safe_addstr(detail_win, line, 0, "Speed:", COLOR_INFO)
+                    safe_addstr(detail_win, line, 7, f"{monster.get('speed', 'Unknown')}", COLOR_DEFAULT)
                     line += 1
-                    detail_win.addstr(line, 0, f"Hit Points: {monster.get('health', 'Unknown')}")
+                    safe_addstr(detail_win, line, 0, "Hit Points:", COLOR_INFO)
+                    safe_addstr(detail_win, line, 12, f"{monster.get('health', 'Unknown')}", COLOR_DEFAULT)
                     line += 1
-                    detail_win.addstr(line, 0, f"Experience: {monster.get('experience', 'Unknown')}")
+                    safe_addstr(detail_win, line, 0, "Experience:", COLOR_INFO)
+                    safe_addstr(detail_win, line, 12, f"{monster.get('experience', 'Unknown')}", COLOR_DEFAULT)
                     line += 1
                     
                     if 'blows' in monster and monster['blows']:
                         line += 1
-                        detail_win.addstr(line, 0, "Blows:")
+                        safe_addstr(detail_win, line, 0, "Blows:", COLOR_INFO)
                         line += 1
                         for blow in monster['blows']:
-                            detail_win.addstr(line, 2, f"- {blow}")
+                            safe_addstr(detail_win, line, 2, f"- {blow}", COLOR_DEFAULT)
                             line += 1
                     
                     if 'flags' in monster and monster['flags']:
                         line += 1
-                        detail_win.addstr(line, 0, "Flags:")
+                        safe_addstr(detail_win, line, 0, "Flags:", COLOR_INFO)
                         line += 1
                         for flag in monster['flags']:
-                            detail_win.addstr(line, 2, f"- {flag}")
+                            safe_addstr(detail_win, line, 2, f"- {flag}", COLOR_DEFAULT)
                             line += 1
                     
                     if 'flags_off' in monster:
                         line += 1
-                        detail_win.addstr(line, 0, f"Flags Off: {monster['flags_off']}")
+                        safe_addstr(detail_win, line, 0, "Flags Off:", COLOR_INFO)
+                        safe_addstr(detail_win, line, 11, f"{monster['flags_off']}", COLOR_DEFAULT)
                         line += 1
                     
                     if 'description' in monster:
                         line += 1
-                        detail_win.addstr(line, 0, f"Description: {monster['description']}")
+                        safe_addstr(detail_win, line, 0, "Description:", COLOR_INFO)
+                        safe_addstr(detail_win, line, 13, f"{monster['description']}", COLOR_DEFAULT)
                         line += 1
                     
                     if 'spell_power' in monster:
                         line += 1
-                        detail_win.addstr(line, 0, f"Spell Power: {monster['spell_power']}")
+                        safe_addstr(detail_win, line, 0, "Spell Power:", COLOR_INFO)
+                        safe_addstr(detail_win, line, 13, f"{monster['spell_power']}", COLOR_DEFAULT)
                         line += 1
                     
                     if 'rarity' in monster:
                         line += 1
-                        detail_win.addstr(line, 0, f"Rarity: {monster['rarity']}")
+                        safe_addstr(detail_win, line, 0, "Rarity:", COLOR_INFO)
+                        safe_addstr(detail_win, line, 8, f"{monster['rarity']}", COLOR_DEFAULT)
                         line += 1
                     
                     line += 2
-                    detail_win.addstr(line, 0, "Press any key to return...")
+                    safe_addstr(detail_win, line, 0, "Press any key to return...", COLOR_HIGHLIGHT)
                     
                     detail_win.refresh()
+                    stdscr.refresh()  # Ensure the main screen is refreshed
                     detail_win.getch()
 
 def main():
+    # Initialize terminal for better display
+    os.environ.setdefault('TERM', 'xterm-256color')
+    
     if len(sys.argv) > 1:
         if sys.argv[1] == "--search" and len(sys.argv) > 2:
             search_term = sys.argv[2]
@@ -306,14 +389,30 @@ def main():
             else:
                 print(f"No monsters found matching '{search_term}'.")
         elif sys.argv[1] == "--curses":
-            curses.wrapper(curses_main)
+            try:
+                # Force the terminal to initialize properly
+                if os.name == 'posix':
+                    os.system('tput init')
+                
+                # Use wrapper to handle terminal setup/cleanup
+                curses.wrapper(curses_main)
+            except Exception as e:
+                print(f"Error: {type(e).__name__}: {str(e)}")
+                print("Falling back to non-curses mode...")
+                interactive_mode()
         else:
             print("Usage: show_monsters.py [--search <monster_name>] [--curses]")
     else:
         try:
+            # Force the terminal to initialize properly
+            if os.name == 'posix':
+                os.system('tput init')
+                
+            # Use wrapper to handle terminal setup/cleanup
             curses.wrapper(curses_main)
-        except:
-            # Fallback to non-curses mode
+        except Exception as e:
+            print(f"Error: {type(e).__name__}: {str(e)}")
+            print("Falling back to non-curses mode...")
             interactive_mode()
 
 if __name__ == "__main__":
