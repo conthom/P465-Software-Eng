@@ -1,4 +1,4 @@
-# Monster Front End (MFE) for Angband
+# Monster File Editor (MFE) for Angband - Group 18
 
 This directory contains a Python-based monster browser for Angband that can be used as a standalone tool or integrated into the main Angband game.
 
@@ -8,24 +8,16 @@ This directory contains a Python-based monster browser for Angband that can be u
 - `monster_screen.c`: C interface to integrate the browser with Angband
 - `monster_screen.h`: Header file for the C interface
 
+Time spent:
+Programming python curses pages: 4 hours (Connor)
+
+
 ## Running as a Standalone Tool
 
 You can run the monster browser as a standalone tool using:
 
 ```bash
 python3 show_monsters.py
-```
-
-Or with curses-based UI:
-
-```bash
-python3 show_monsters.py --curses
-```
-
-To search for specific monsters:
-
-```bash
-python3 show_monsters.py --search "dragon"
 ```
 
 ## Integrating with Angband
