@@ -536,7 +536,7 @@ def curses_main(stdscr):
         status_win.clear()
         
         # Draw header
-        safe_addstr(header_win, 0, 0, "Angband Monster Browser", COLOR_HEADER)
+        safe_addstr(header_win, 0, 0, "Angband Monster Editor", COLOR_HEADER)
         safe_addstr(header_win, 1, 0, "=" * (width - 1), COLOR_DEFAULT)
         
         # Draw monster list
@@ -621,24 +621,15 @@ def main():
     # Initialize terminal for better display
     os.environ.setdefault('TERM', 'xterm-256color')
     
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--search" and len(sys.argv) > 2:
-            search_term = sys.argv[2]
-            results = search_monsters(search_term)
-            if not results:
-                print(f"No monsters found matching '{search_term}'.")
-        else:
-            print("Usage: show_monsters.py [--search <monster_name>]")
-    else:
-        try:
+    try:
             # Force the terminal to initialize properly
             if os.name == 'posix':
                 os.system('tput init')
                 
             # Use wrapper to handle terminal setup/cleanup
             curses.wrapper(curses_main)
-        except Exception as e:
-            print(f"Error: {type(e).__name__}: {str(e)}")
+    except Exception as e:
+        print(f"Error: {type(e).__name__}: {str(e)}")
 
 if __name__ == "__main__":
     main()
