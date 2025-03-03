@@ -229,7 +229,7 @@ struct cmd_info cmd_hidden[] =
 	{ "Repeat previous command", { 'n', KTRL('V') }, CMD_REPEAT, NULL, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Do autopickup", { KTRL('G') }, CMD_AUTOPICKUP, NULL, NULL, 0, NULL, NULL, NULL, 0 },
 	{ "Debug mode commands", { KTRL('A') }, CMD_NULL, NULL, NULL, 1, "Debug Command: ", "That is not a valid debug command.", "Debug", -1 },
-	{ "Monster Browser", { KTRL('M') }, CMD_NULL, do_cmd_monster_browser, NULL, 0, NULL, NULL, NULL, 0 },
+	{ "Monster Editor", { KTRL('M') }, CMD_NULL, do_cmd_monster_browser, NULL, 0, NULL, NULL, NULL, 0 },
 #ifdef ALLOW_BORG
 	{ "Borg commands", { KTRL('Z') }, CMD_NULL, do_cmd_try_borg, NULL, 0, NULL, NULL, NULL, 0 },
 #endif
@@ -1287,7 +1287,7 @@ void do_cmd_monster_browser(void)
 	flush(0, NULL, NULL);
 	
 	/* Execute the monster browser script */
-	int result = system("~/CP465/angband/src/MFE/run_monster_browser.sh");
+	int result = system("~/CP465/angband/src/MFE/run_monster_editor.sh");
 	
 	/* Check if the script executed properly */
 	if (result != 0) {
