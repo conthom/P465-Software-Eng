@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import sys
 import curses
@@ -50,6 +49,16 @@ def handle_menu_input(key, valid_keys):
 
 def handle_input_editing(status_win, width, initial_value="", prompt=""):
     """Common function to handle input editing with proper cursor movement."""
+    # Save the current content of the status window to restore it later
+    status_content = []
+    for y in range(3):  # Status window is typically 3 lines
+        try:
+            line = status_win.instr(y, 0, width - 1).decode('utf-8')
+            status_content.append(line)
+        except:
+            status_content.append("")
+    
+    # Now handle the editing
     status_win.erase()
     status_win.addstr(0, 0, prompt, COLOR_HIGHLIGHT)
     status_win.addstr(1, 0, " " * (width - 1))  # Clear input line
@@ -83,16 +92,6 @@ def handle_input_editing(status_win, width, initial_value="", prompt=""):
         elif ch == curses.KEY_DC:  # Delete
             if input_pos < len(edit_buffer):
                 edit_buffer.pop(input_pos)
-        elif ch in (curses.KEY_LEFT, curses.KEY_BTAB):  # Left arrow or Shift+Tab
-            if input_pos > 0:
-                input_pos -= 1
-        elif ch in (curses.KEY_RIGHT, ord('\t')):  # Right arrow or Tab
-            if input_pos < len(edit_buffer):
-                input_pos += 1
-        elif ch == curses.KEY_HOME:  # Home
-            input_pos = 0
-        elif ch == curses.KEY_END:  # End
-            input_pos = len(edit_buffer)
         elif 32 <= ch <= 126:  # Printable characters
             if input_pos < len(edit_buffer):
                 edit_buffer.insert(input_pos, chr(ch))
@@ -103,12 +102,19 @@ def handle_input_editing(status_win, width, initial_value="", prompt=""):
     curses.noecho()
     curses.curs_set(0)  # Hide cursor
     
+    # Restore the status window content
+    status_win.erase()
+    for y, line in enumerate(status_content):
+        if line:
+            status_win.addstr(y, 0, line)
+    status_win.refresh()
+    
     return result
 
 def parse_monster_file():
     monsters = []
     with open(ANGBAND_MONSTER_FILE, 'r') as file:
-        lines = file.readlines()
+        lines = file.readlines()[240:]
         current_monster = {}
         
         for line in lines:
@@ -219,8 +225,6 @@ def init_curses():
     curses.keyname(8)  # Ensure backspace is recognized
     curses.keyname(127)  # Ensure delete is recognized
     curses.keyname(curses.KEY_BACKSPACE)  # Ensure KEY_BACKSPACE is recognized
-    curses.keyname(curses.KEY_LEFT)  # Ensure left arrow is recognized
-    curses.keyname(curses.KEY_RIGHT)  # Ensure right arrow is recognized
 
 def get_status_text(line):
     """Generate appropriate status text based on the selected line."""
@@ -710,9 +714,12 @@ def edit_monster_blow(window, monster, height, width):
         detail_win = curses.newwin(height - 6, width // 2, 3, width // 2)
         status_win = curses.newwin(3, width, height - 3, 0)
         
-        # Immediately draw a loading message
+        # Immediately draw a loading message and refresh
         list_win.addstr(0, 0, "Loading blow data...", COLOR_INFO)
         list_win.refresh()
+        detail_win.refresh()
+        status_win.refresh()
+        window.refresh()  # Ensure the parent window is refreshed too
     except curses.error:
         window.addstr(0, 0, "Error: Screen too small for blow editor")
         window.refresh()
@@ -767,10 +774,11 @@ def edit_monster_blow(window, monster, height, width):
             status_win.addstr(0, 0, "=" * (width - 1), COLOR_DEFAULT)
             status_win.addstr(1, 0, "a:Add  e:Edit  d:Delete  ESC/q:Back", COLOR_INFO)
             
-            # Refresh each window
+            # Refresh each window - use direct refresh instead of noutrefresh/doupdate
             list_win.refresh()
             detail_win.refresh()
             status_win.refresh()
+            window.refresh()  # Ensure the parent window is refreshed too
             
             return True
         except curses.error:
@@ -782,11 +790,14 @@ def edit_monster_blow(window, monster, height, width):
             except:
                 return False
 
-    # Initial draw of the interface
+    # Initial draw of the interface - use direct refresh calls
     if not draw_interface():
         window.getch()
         del list_win, detail_win, status_win
         return False
+    
+    # Force a refresh of all windows to ensure they're visible
+    curses.doupdate()
 
     while True:
         try:
@@ -809,6 +820,9 @@ def edit_monster_blow(window, monster, height, width):
             action = handle_menu_input(key, 'aed')
             if action:
                 if action == 'a':  # Add new blow
+                    # Draw interface again before editing to ensure it's visible
+                    draw_interface()
+                    
                     new_blow = handle_input_editing(
                         status_win,
                         width,
@@ -829,6 +843,9 @@ def edit_monster_blow(window, monster, height, width):
                     
                 elif action == 'e' and blows:  # Edit blow
                     if current_pos < len(blows):
+                        # Draw interface again before editing to ensure it's visible
+                        draw_interface()
+                        
                         edited_blow = handle_input_editing(
                             status_win,
                             width,
@@ -849,6 +866,9 @@ def edit_monster_blow(window, monster, height, width):
                                 
                 elif action == 'd' and blows:  # Delete blow
                     if current_pos < len(blows):
+                        # Draw interface again before confirming to ensure it's visible
+                        draw_interface()
+                        
                         if get_yes_no(status_win, "Delete this blow? (y/n)", COLOR_HIGHLIGHT):
                             del blows[current_pos]
                             if current_pos >= len(blows):
@@ -880,9 +900,12 @@ def edit_monster_flags(window, monster, height, width):
         detail_win = curses.newwin(height - 6, width // 2, 3, width // 2)
         status_win = curses.newwin(3, width, height - 3, 0)
         
-        # Immediately draw a loading message
+        # Immediately draw a loading message and refresh
         list_win.addstr(0, 0, "Loading flags...", COLOR_INFO)
         list_win.refresh()
+        detail_win.refresh()
+        status_win.refresh()
+        window.refresh()  # Ensure the parent window is refreshed too
     except curses.error:
         window.addstr(0, 0, "Error: Screen too small for flag editor")
         window.refresh()
@@ -926,10 +949,11 @@ def edit_monster_flags(window, monster, height, width):
             status_win.addstr(0, 0, "=" * (width - 1), COLOR_DEFAULT)
             status_win.addstr(1, 0, "a:Add  e:Edit  d:Delete  ESC/q:Back", COLOR_INFO)
             
-            # Refresh each window
+            # Refresh each window - use direct refresh instead of noutrefresh/doupdate
             list_win.refresh()
             detail_win.refresh()
             status_win.refresh()
+            window.refresh()  # Ensure the parent window is refreshed too
             
             return True
         except curses.error:
@@ -941,11 +965,14 @@ def edit_monster_flags(window, monster, height, width):
             except:
                 return False
 
-    # Initial draw of the interface
+    # Initial draw of the interface - use direct refresh calls
     if not draw_interface():
         window.getch()
         del list_win, detail_win, status_win
         return False
+    
+    # Force a refresh of all windows to ensure they're visible
+    curses.doupdate()
 
     while True:
         try:
@@ -975,6 +1002,9 @@ def edit_monster_flags(window, monster, height, width):
             action = handle_menu_input(key, 'aed')
             if action:
                 if action == 'a':  # Add new flag
+                    # Draw interface again before editing to ensure it's visible
+                    draw_interface()
+                    
                     new_flag = handle_input_editing(
                         status_win,
                         width,
@@ -988,6 +1018,9 @@ def edit_monster_flags(window, monster, height, width):
                         
                 elif action == 'e' and flags:  # Edit flag
                     if current_pos < len(flags):
+                        # Draw interface again before editing to ensure it's visible
+                        draw_interface()
+                        
                         edited_flag = handle_input_editing(
                             status_win,
                             width,
@@ -1001,6 +1034,9 @@ def edit_monster_flags(window, monster, height, width):
                             
                 elif action == 'd' and flags:  # Delete flag
                     if current_pos < len(flags):
+                        # Draw interface again before confirming to ensure it's visible
+                        draw_interface()
+                        
                         if get_yes_no(status_win, "Delete this flag? (y/n)", COLOR_HIGHLIGHT):
                             del flags[current_pos]
                             if current_pos >= len(flags):
