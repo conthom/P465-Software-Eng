@@ -1,0 +1,16 @@
+NAME
+    edit_monsters.py - browses and edits Angband monster files
+SYNOPSIS
+    run python3 edit_monsters.py within the angband src folder so it can properly access the monster.txt file
+DESCRIPTION
+    a Python-based tool for browsing and editing monster data files for the Angband roguelike game.
+    The editor provides a curses-based interface for viewing monster statistics, abilities,
+    and other attributes, as well as making modifications to these values.
+EXAMPLES
+    Some examples of common usage.
+SEE ALSO
+    A list of related commands or functions.
+BUGS
+    List known bugs.
+AUTHOR
+   CSCI-P465 SWE Group 18
