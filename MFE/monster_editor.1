@@ -1,0 +1,42 @@
+.TH MONSTER-EDITOR 1 "May 2023" "Version 1.0" "Monster File Editor Manual"
+.SH NAME
+monster-editor \- browse and edit Angband monster files
+.SH SYNOPSIS
+.B monster-editor
+.SH DESCRIPTION
+.B monster-editor
+is a tool for browsing and editing monster data files for the Angband roguelike game.
+The editor provides a curses-based interface for viewing monster statistics, abilities,
+and other attributes, as well as making modifications to these values.
+.SH USAGE
+Simply run the program without any arguments:
+.PP
+.B monster-editor
+.PP
+Navigation is handled through the keyboard:
+.IP \(bu 2
+J/K keys to move through lists
+.IP \(bu 2
+Enter to select a monster
+.IP \(bu 2
+Tab to switch between panels
+.IP \(bu 2
+'q' to quit the current screen or the program
+.SH FILES
+.TP
+.I /path/to/angband/lib/gamedata/monster.txt
+The monster data file that is read and modified by the editor.
+.SH INTEGRATION WITH ANGBAND
+The Monster File Editor can be integrated with Angband by:
+.IP \(bu 2
+Adding the monster browser to the knowledge menu
+.IP \(bu 2
+Including the necessary source files in the Angband build system
+.SH BUGS
+Please report any bugs to the project repository at:
+.br
+https://github.com/conthom/P465-Software-Eng
+.SH AUTHOR
+Group 18 - P465 Software Engineering
+.SH SEE ALSO
+.BR angband (6)
