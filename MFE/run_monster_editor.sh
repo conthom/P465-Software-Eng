@@ -1,5 +1,9 @@
 #!/bin/bash
 
+echo "Setting permissions for run_monster_editor.sh..."
+sudo chmod +x run_monster_editor.sh
+echo "Permissions set successfully."
+
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
