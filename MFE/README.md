@@ -10,7 +10,6 @@ This directory contains a Python-based monster browser for Angband that can be u
 - `monster_screen.h`: Header file for the C interface
 - `ui-game.c`: edited ui command Angband file for integrating ^M command for running the editor in game
 
-
 Time spent:
 Programming python curses pages and functionality: 7 hours
 Writing test cases: 1 hour

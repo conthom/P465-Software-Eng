@@ -2,6 +2,8 @@ import os
 import sys
 import curses
 from datetime import datetime
+import argparse
+import shutil
 
 # Path to Angband's monster data file
 ANGBAND_MONSTER_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'lib/gamedata/monster.txt')
@@ -492,13 +494,16 @@ def generate_monster_content(monster, width):
     return content_lines
 
 def save_all_changes(monsters):
-    """Save all changes to a new monster file with timestamp."""
-    # Generate new filename with timestamp
+    """Save all changes to the original monster file and create a backup."""
+    # Generate backup filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    new_filename = f"monster_{timestamp}.txt"
-    new_filepath = os.path.join(os.path.dirname(ANGBAND_MONSTER_FILE), new_filename)
+    backup_filename = f"monster_{timestamp}.txt"
+    backup_filepath = os.path.join(os.path.dirname(ANGBAND_MONSTER_FILE), backup_filename)
     
     try:
+        # Create backup of original file
+        shutil.copy2(ANGBAND_MONSTER_FILE, backup_filepath)
+        
         # Read the original file to preserve comments and structure
         with open(ANGBAND_MONSTER_FILE, 'r') as file:
             lines = file.readlines()
@@ -528,7 +533,21 @@ def save_all_changes(monsters):
                         new_lines.append(f"experience:{current_monster['experience']}\n")
                     if 'blows' in current_monster:
                         for blow in current_monster['blows']:
-                            new_lines.append(f"blow:{blow}\n")
+                            # Ensure blow is properly formatted as "blow:METHOD:EFFECT:DAMAGE"
+                            if ':' in blow:
+                                # If already in format METHOD:EFFECT:DAMAGE, just add "blow:" prefix
+                                new_lines.append(f"blow:{blow}\n")
+                            else:
+                                # If in space-separated format, convert to proper format
+                                parts = blow.split()
+                                if len(parts) >= 3:
+                                    method = parts[0].upper()
+                                    effect = parts[1].upper()
+                                    damage = parts[2]
+                                    new_lines.append(f"blow:{method}:{effect}:{damage}\n")
+                                else:
+                                    # If can't parse properly, just save as-is with "blow:" prefix
+                                    new_lines.append(f"blow:{blow}\n")
                     if 'flags' in current_monster:
                         for flag in current_monster['flags']:
                             new_lines.append(f"flags:{flag}\n")
@@ -549,14 +568,14 @@ def save_all_changes(monsters):
                 skip_until_next = False
                 new_lines.append(line)
         
-        # Write the new file
-        with open(new_filepath, 'w') as file:
+        # Write changes directly to the original file
+        with open(ANGBAND_MONSTER_FILE, 'w') as file:
             file.writelines(new_lines)
         
-        return new_filepath
+        return backup_filepath, ANGBAND_MONSTER_FILE
     except Exception as e:
         print(f"Error saving changes: {e}")
-        return None
+        return None, None
 
 def curses_main(stdscr):
     # Initialize curses with proper settings
@@ -784,7 +803,8 @@ def edit_monster_blow(window, monster, height, width):
             
         # Handle menu actions
         if key == ord('a'):  # Add new blow
-            window.addstr(footer_y + 1, 0, "Enter new blow (method effect damage) or ESC to cancel:", COLOR_HIGHLIGHT)
+            prompt = "Enter new blow (method effect damage) or ESC to cancel:"
+            window.addstr(footer_y + 1, 0, prompt, COLOR_HIGHLIGHT)
             window.clrtoeol()
             window.refresh()
             
@@ -793,30 +813,75 @@ def edit_monster_blow(window, monster, height, width):
             
             try:
                 new_blow = ""
-                # Position cursor at the prompt
-                window.move(footer_y + 1, 55)
-                new_blow = window.getstr(100).decode('utf-8')
+                input_pos = len(prompt) + 1  # Position after the prompt
+                window.move(footer_y + 1, input_pos)
+                
+                # Get input character by character
+                ch = window.getch()
+                while ch != 27 and ch != 10 and ch != 13:  # Not ESC and not Enter
+                    if ch in (curses.KEY_BACKSPACE, 8, 127):  # Backspace
+                        if new_blow:
+                            new_blow = new_blow[:-1]
+                            # Clear the line after the prompt
+                            window.addstr(footer_y + 1, input_pos, " " * (width - input_pos))
+                            # Redraw the input
+                            window.addstr(footer_y + 1, input_pos, new_blow)
+                            window.move(footer_y + 1, input_pos + len(new_blow))
+                    elif 32 <= ch <= 126:  # Printable characters
+                        new_blow += chr(ch)
+                        window.addstr(footer_y + 1, input_pos + len(new_blow) - 1, chr(ch))
+                    window.refresh()
+                    ch = window.getch()
+                
+                if ch == 27:  # ESC pressed
+                    new_blow = None
+                
             except:
-                new_blow = ""
+                new_blow = None
             finally:
                 curses.noecho()
                 curses.curs_set(0)  # Hide cursor
             
             if new_blow:
                 parts = new_blow.split()
-                if len(parts) >= 2 and parts[0] in methods and parts[1] in effects:
-                    blows.append(new_blow)
-                    current_pos = len(blows) - 1
-                    changes_made = True
+                if len(parts) >= 3:  # Need at least method, effect, and damage
+                    method = parts[0].upper()  # Convert to uppercase
+                    effect = parts[1].upper()  # Convert to uppercase
+                    damage = parts[2]
+                    
+                    # Check if method and effect exist (case-insensitive)
+                    method_exists = method in methods or method.lower() in [m.lower() for m in methods]
+                    effect_exists = effect in effects or effect.lower() in [e.lower() for e in effects]
+                    
+                    if method_exists and effect_exists:
+                        # Format the blow properly: METHOD:EFFECT:DAMAGE
+                        formatted_blow = f"{method}:{effect}:{damage}"
+                        blows.append(formatted_blow)
+                        current_pos = len(blows) - 1
+                        changes_made = True
+                    else:
+                        window.addstr(footer_y + 1, 0, "Unknown method or effect", COLOR_IMPORTANT)
+                        window.clrtoeol()
+                        window.refresh()
+                        window.getch()
                 else:
-                    window.addstr(footer_y + 1, 0, "Invalid blow format or unknown method/effect", COLOR_IMPORTANT)
+                    window.addstr(footer_y + 1, 0, "Invalid format. Use: method effect damage", COLOR_IMPORTANT)
                     window.clrtoeol()
                     window.refresh()
                     window.getch()
                 
         elif key == ord('e') and blows:  # Edit blow
             if current_pos < len(blows):
-                window.addstr(footer_y + 1, 0, "Edit blow or ESC to cancel:", COLOR_HIGHLIGHT)
+                # Parse the current blow to display in a more user-friendly format
+                current_blow = blows[current_pos]
+                parts = current_blow.split(':')
+                if len(parts) >= 3:
+                    display_blow = f"{parts[0]} {parts[1]} {parts[2]}"
+                else:
+                    display_blow = current_blow
+                
+                prompt = "Edit blow (method effect damage) or ESC to cancel:"
+                window.addstr(footer_y + 1, 0, prompt, COLOR_HIGHLIGHT)
                 window.clrtoeol()
                 window.refresh()
                 
@@ -824,23 +889,63 @@ def edit_monster_blow(window, monster, height, width):
                 curses.curs_set(1)  # Show cursor
                 
                 try:
-                    # Position cursor at the prompt and pre-fill with current value
-                    window.addstr(footer_y + 1, 30, blows[current_pos])
-                    window.move(footer_y + 1, 30)
-                    edited_blow = window.getstr(100).decode('utf-8')
+                    # Initialize edit buffer with current value
+                    edited_blow = display_blow
+                    input_pos = len(prompt) + 1  # Position after the prompt
+                    
+                    # Show initial value
+                    window.addstr(footer_y + 1, input_pos, edited_blow)
+                    window.move(footer_y + 1, input_pos + len(edited_blow))
+                    
+                    # Get input character by character
+                    ch = window.getch()
+                    while ch != 27 and ch != 10 and ch != 13:  # Not ESC and not Enter
+                        if ch in (curses.KEY_BACKSPACE, 8, 127):  # Backspace
+                            if edited_blow:
+                                edited_blow = edited_blow[:-1]
+                                # Clear the line after the prompt
+                                window.addstr(footer_y + 1, input_pos, " " * (width - input_pos))
+                                # Redraw the input
+                                window.addstr(footer_y + 1, input_pos, edited_blow)
+                                window.move(footer_y + 1, input_pos + len(edited_blow))
+                        elif 32 <= ch <= 126:  # Printable characters
+                            edited_blow += chr(ch)
+                            window.addstr(footer_y + 1, input_pos + len(edited_blow) - 1, chr(ch))
+                        window.refresh()
+                        ch = window.getch()
+                    
+                    if ch == 27:  # ESC pressed
+                        edited_blow = None
+                        
                 except:
-                    edited_blow = ""
+                    edited_blow = None
                 finally:
                     curses.noecho()
                     curses.curs_set(0)  # Hide cursor
                 
                 if edited_blow:
                     parts = edited_blow.split()
-                    if len(parts) >= 2 and parts[0] in methods and parts[1] in effects:
-                        blows[current_pos] = edited_blow
-                        changes_made = True
+                    if len(parts) >= 3:  # Need at least method, effect, and damage
+                        method = parts[0].upper()  # Convert to uppercase
+                        effect = parts[1].upper()  # Convert to uppercase
+                        damage = parts[2]
+                        
+                        # Check if method and effect exist (case-insensitive)
+                        method_exists = method in methods or method.lower() in [m.lower() for m in methods]
+                        effect_exists = effect in effects or effect.lower() in [e.lower() for e in effects]
+                        
+                        if method_exists and effect_exists:
+                            # Format the blow properly: METHOD:EFFECT:DAMAGE
+                            formatted_blow = f"{method}:{effect}:{damage}"
+                            blows[current_pos] = formatted_blow
+                            changes_made = True
+                        else:
+                            window.addstr(footer_y + 1, 0, "Unknown method or effect", COLOR_IMPORTANT)
+                            window.clrtoeol()
+                            window.refresh()
+                            window.getch()
                     else:
-                        window.addstr(footer_y + 1, 0, "Invalid blow format or unknown method/effect", COLOR_IMPORTANT)
+                        window.addstr(footer_y + 1, 0, "Invalid format. Use: method effect damage", COLOR_IMPORTANT)
                         window.clrtoeol()
                         window.refresh()
                         window.getch()
@@ -935,7 +1040,8 @@ def edit_monster_flags(window, monster, height, width):
             
         # Handle menu actions
         if key == ord('a'):  # Add new flag
-            window.addstr(footer_y + 1, 0, "Enter new flag or ESC to cancel:", COLOR_HIGHLIGHT)
+            prompt = "Enter new flag or ESC to cancel:"
+            window.addstr(footer_y + 1, 0, prompt, COLOR_HIGHLIGHT)
             window.clrtoeol()
             window.refresh()
             
@@ -944,23 +1050,49 @@ def edit_monster_flags(window, monster, height, width):
             
             try:
                 new_flag = ""
-                # Position cursor at the prompt
-                window.move(footer_y + 1, 35)
-                new_flag = window.getstr(100).decode('utf-8')
+                input_pos = len(prompt) + 1  # Position after the prompt
+                window.move(footer_y + 1, input_pos)
+                
+                # Get input character by character
+                ch = window.getch()
+                while ch != 27 and ch != 10 and ch != 13:  # Not ESC and not Enter
+                    if ch in (curses.KEY_BACKSPACE, 8, 127):  # Backspace
+                        if new_flag:
+                            new_flag = new_flag[:-1]
+                            # Clear the line after the prompt
+                            window.addstr(footer_y + 1, input_pos, " " * (width - input_pos))
+                            # Redraw the input
+                            window.addstr(footer_y + 1, input_pos, new_flag)
+                            window.move(footer_y + 1, input_pos + len(new_flag))
+                    elif 32 <= ch <= 126:  # Printable characters
+                        new_flag += chr(ch)
+                        window.addstr(footer_y + 1, input_pos + len(new_flag) - 1, chr(ch))
+                    window.refresh()
+                    ch = window.getch()
+                
+                if ch == 27:  # ESC pressed
+                    new_flag = None
+                    
             except:
-                new_flag = ""
+                new_flag = None
             finally:
                 curses.noecho()
                 curses.curs_set(0)  # Hide cursor
             
             if new_flag:
-                flags.append(new_flag)
-                current_pos = len(flags) - 1
-                changes_made = True
+                # Convert flag to uppercase for consistency
+                parts = new_flag.split()
+                if len(parts) > 0:
+                    # If the flag has multiple parts (like "SMART OPEN"), convert each part
+                    formatted_flag = ' '.join([part.upper() for part in parts])
+                    flags.append(formatted_flag)
+                    current_pos = len(flags) - 1
+                    changes_made = True
                 
         elif key == ord('e') and flags:  # Edit flag
             if current_pos < len(flags):
-                window.addstr(footer_y + 1, 0, "Edit flag or ESC to cancel:", COLOR_HIGHLIGHT)
+                prompt = "Edit flag or ESC to cancel:"
+                window.addstr(footer_y + 1, 0, prompt, COLOR_HIGHLIGHT)
                 window.clrtoeol()
                 window.refresh()
                 
@@ -968,19 +1100,49 @@ def edit_monster_flags(window, monster, height, width):
                 curses.curs_set(1)  # Show cursor
                 
                 try:
-                    # Position cursor at the prompt and pre-fill with current value
-                    window.addstr(footer_y + 1, 30, flags[current_pos])
-                    window.move(footer_y + 1, 30)
-                    edited_flag = window.getstr(100).decode('utf-8')
+                    # Initialize edit buffer with current value
+                    current_flag = flags[current_pos]
+                    edited_flag = current_flag
+                    input_pos = len(prompt) + 1  # Position after the prompt
+                    
+                    # Show initial value
+                    window.addstr(footer_y + 1, input_pos, edited_flag)
+                    window.move(footer_y + 1, input_pos + len(edited_flag))
+                    
+                    # Get input character by character
+                    ch = window.getch()
+                    while ch != 27 and ch != 10 and ch != 13:  # Not ESC and not Enter
+                        if ch in (curses.KEY_BACKSPACE, 8, 127):  # Backspace
+                            if edited_flag:
+                                edited_flag = edited_flag[:-1]
+                                # Clear the line after the prompt
+                                window.addstr(footer_y + 1, input_pos, " " * (width - input_pos))
+                                # Redraw the input
+                                window.addstr(footer_y + 1, input_pos, edited_flag)
+                                window.move(footer_y + 1, input_pos + len(edited_flag))
+                        elif 32 <= ch <= 126:  # Printable characters
+                            edited_flag += chr(ch)
+                            window.addstr(footer_y + 1, input_pos + len(edited_flag) - 1, chr(ch))
+                        window.refresh()
+                        ch = window.getch()
+                    
+                    if ch == 27:  # ESC pressed
+                        edited_flag = None
+                        
                 except:
-                    edited_flag = ""
+                    edited_flag = None
                 finally:
                     curses.noecho()
                     curses.curs_set(0)  # Hide cursor
                 
                 if edited_flag:
-                    flags[current_pos] = edited_flag
-                    changes_made = True
+                    # Convert flag to uppercase for consistency
+                    parts = edited_flag.split()
+                    if len(parts) > 0:
+                        # If the flag has multiple parts (like "SMART OPEN"), convert each part
+                        formatted_flag = ' '.join([part.upper() for part in parts])
+                        flags[current_pos] = formatted_flag
+                        changes_made = True
                     
         elif key == ord('d') and flags:  # Delete flag
             if current_pos < len(flags):
@@ -1001,7 +1163,50 @@ def main():
     # Initialize terminal for better display
     os.environ.setdefault('TERM', 'xterm-256color')
     
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Angband Monster Editor")
+    parser.add_argument("--test", action="store_true", help="Run test mode: modify Blubbering idiot and save")
+    args = parser.parse_args()
+    
     try:
+        if args.test:
+            # Load monsters
+            monsters = parse_monster_file()
+            # Find Blubbering idiot
+            blubbering_idiot = None
+            for monster in monsters:
+                if monster['name'].lower() == "blubbering idiot":
+                    blubbering_idiot = monster
+                    break
+            
+            if blubbering_idiot:
+                # Make some test modifications
+                blubbering_idiot['speed'] = 140
+                blubbering_idiot['health'] = 200
+                blubbering_idiot['blows'] = ["CLAW:HURT:15d6", "BITE:POISON:2d6"]
+                blubbering_idiot['flags'] = ["UNIQUE", "SMART", "EVIL"]
+                modified_monsters.add(blubbering_idiot['name'])
+                
+                # Save changes
+                backup_file, game_file = save_all_changes(monsters)
+                if backup_file and game_file:
+                    print(f"\nTest changes made successfully!")
+                    print(f"Backup saved to: {os.path.basename(backup_file)}")
+                    print(f"Changes written to: {os.path.basename(game_file)}")
+                    print("\nChanges made to Blubbering idiot:")
+                    print("- Speed: 140")
+                    print("- Hit Points: 200")
+                    print("- Blows: CLAW:HURT:15d6, BITE:POISON:2d6")
+                    print("- Flags: UNIQUE, SMART, EVIL")
+                    print("\nTo use these changes:")
+                    print("1. The game file has been automatically updated")
+                    print("2. Run 'make' to rebuild the game")
+                    print("3. Run './angband' to play with the changes")
+                else:
+                    print("Error: Failed to save changes")
+            else:
+                print("Error: Could not find Blubbering idiot monster")
+        else:
             # Force the terminal to initialize properly
             if os.name == 'posix':
                 os.system('tput init')
