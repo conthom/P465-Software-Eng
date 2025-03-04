@@ -72,4 +72,4 @@ python3 show_monsters.py
 - If the curses interface fails, it will fall back to a simpler text-based interface
 - The browser displays monster names in a list and shows detailed information when a monster is selected 
 
-!img[](mfe_pic.png)
+![img](mfe_pic.png)
