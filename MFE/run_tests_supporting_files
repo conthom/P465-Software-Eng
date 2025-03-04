@@ -5,3 +5,8 @@
 
 
 # Supporting files in the MFE
+
+- `run_monster_editor.sh`: Shell file for starting the edit monsters script within Angband but can also start by running python file directly
+- `monster_screen.c`: C interface to integrate the browser with Angband
+- `monster_screen.h`: Header file for the C interface
+- `ui-game.c`: Edited ui command Angband file for integrating ^M command for running the editor in game

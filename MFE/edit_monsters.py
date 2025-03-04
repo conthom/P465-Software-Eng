@@ -707,357 +707,294 @@ def parse_blow_data(filename):
     return data
 
 def edit_monster_blow(window, monster, height, width):
-    """Edit a monster's blow attacks."""
-    # Create windows for the interface first
-    try:
-        list_win = curses.newwin(height - 6, width // 2, 3, 0)
-        detail_win = curses.newwin(height - 6, width // 2, 3, width // 2)
-        status_win = curses.newwin(3, width, height - 3, 0)
-        
-        # Immediately draw a loading message and refresh
-        list_win.addstr(0, 0, "Loading blow data...", COLOR_INFO)
-        list_win.refresh()
-        detail_win.refresh()
-        status_win.refresh()
-        window.refresh()  # Ensure the parent window is refreshed too
-    except curses.error:
-        window.addstr(0, 0, "Error: Screen too small for blow editor")
-        window.refresh()
-        window.getch()
-        return False
+    """Edit a monster's blow attacks with a simplified interface that works on smaller screens."""
+    # Use a single window approach instead of multiple windows
+    window.clear()
+    window.refresh()
     
     # Load blow effects and methods
     try:
         effects = parse_blow_data(BLOW_EFFECTS_FILE)
         methods = parse_blow_data(BLOW_METHODS_FILE)
     except Exception as e:
-        status_win.addstr(0, 0, f"Error loading blow data: {str(e)}")
-        status_win.refresh()
-        window.getch()
-        del list_win, detail_win, status_win
-        return False
-    
-    # Get current blows
-    blows = monster.get('blows', [])
-    current_pos = 0
-    changes_made = False
-    
-    def draw_interface():
-        """Helper function to draw the interface"""
-        try:
-            # Clear all windows
-            list_win.erase()
-            detail_win.erase()
-            status_win.erase()
-            
-            # Show current blows
-            list_win.addstr(0, 0, "Current Blows:", COLOR_HEADER)
-            if blows:
-                for i, blow in enumerate(blows):
-                    if i == current_pos:
-                        list_win.addstr(i + 2, 0, f"> {blow}", curses.A_REVERSE)
-                    else:
-                        list_win.addstr(i + 2, 0, f"  {blow}", COLOR_DEFAULT)
-            else:
-                list_win.addstr(2, 2, "No blows defined", COLOR_DEFAULT)
-            
-            # Show help in detail window
-            detail_win.addstr(0, 0, "Blow Editor Help:", COLOR_HEADER)
-            detail_win.addstr(2, 0, "a: Add new blow", COLOR_INFO)
-            detail_win.addstr(3, 0, "e: Edit selected blow", COLOR_INFO)
-            detail_win.addstr(4, 0, "d: Delete selected blow", COLOR_INFO)
-            detail_win.addstr(5, 0, "Enter: View blow details", COLOR_INFO)
-            detail_win.addstr(6, 0, "j/k: Navigate blows", COLOR_INFO)
-            detail_win.addstr(7, 0, "ESC/q: Return to monster view", COLOR_INFO)
-            
-            # Show status
-            status_win.addstr(0, 0, "=" * (width - 1), COLOR_DEFAULT)
-            status_win.addstr(1, 0, "a:Add  e:Edit  d:Delete  ESC/q:Back", COLOR_INFO)
-            
-            # Refresh each window - use direct refresh instead of noutrefresh/doupdate
-            list_win.refresh()
-            detail_win.refresh()
-            status_win.refresh()
-            window.refresh()  # Ensure the parent window is refreshed too
-            
-            return True
-        except curses.error:
-            try:
-                status_win.erase()
-                status_win.addstr(0, 0, "Error: Screen too small or display error", COLOR_IMPORTANT)
-                status_win.refresh()
-                return False
-            except:
-                return False
-
-    # Initial draw of the interface - use direct refresh calls
-    if not draw_interface():
-        window.getch()
-        del list_win, detail_win, status_win
-        return False
-    
-    # Force a refresh of all windows to ensure they're visible
-    curses.doupdate()
-
-    while True:
-        try:
-            key = window.getch()
-            
-            if key in (ord('q'), 27):  # q or ESC to quit
-                if changes_made:
-                    monster['blows'] = blows
-                break
-                
-            # Handle navigation
-            if key in (ord('j'), ord('k')):
-                new_pos, _ = navigate_list(current_pos, key, blows)
-                if new_pos != current_pos:
-                    current_pos = new_pos
-                    if not draw_interface():
-                        break
-                        
-            # Handle menu actions
-            action = handle_menu_input(key, 'aed')
-            if action:
-                if action == 'a':  # Add new blow
-                    # Draw interface again before editing to ensure it's visible
-                    draw_interface()
-                    
-                    new_blow = handle_input_editing(
-                        status_win,
-                        width,
-                        prompt='Edit blow format: "method effect damage" (damage = xdy, x = # dice, y = # damage) or ESC to cancel:'
-                    )
-                    
-                    if new_blow:
-                        parts = new_blow.split()
-                        if len(parts) >= 2 and parts[0] in methods and parts[1] in effects:
-                            blows.append(new_blow)
-                            current_pos = len(blows) - 1
-                            changes_made = True
-                        else:
-                            status_win.erase()
-                            status_win.addstr(0, 0, "Invalid blow format or unknown method/effect", COLOR_IMPORTANT)
-                            status_win.refresh()
-                            window.getch()
-                    
-                elif action == 'e' and blows:  # Edit blow
-                    if current_pos < len(blows):
-                        # Draw interface again before editing to ensure it's visible
-                        draw_interface()
-                        
-                        edited_blow = handle_input_editing(
-                            status_win,
-                            width,
-                            initial_value=blows[current_pos],
-                            prompt='Edit blow format: "method effect damage" (damage = xdy, x = # dice, y = # damage) or ESC to cancel:'
-                        )
-                        
-                        if edited_blow:
-                            parts = edited_blow.split()
-                            if len(parts) >= 2 and parts[0] in methods and parts[1] in effects:
-                                blows[current_pos] = edited_blow
-                                changes_made = True
-                            else:
-                                status_win.erase()
-                                status_win.addstr(0, 0, "Invalid blow format or unknown method/effect", COLOR_IMPORTANT)
-                                status_win.refresh()
-                                window.getch()
-                                
-                elif action == 'd' and blows:  # Delete blow
-                    if current_pos < len(blows):
-                        # Draw interface again before confirming to ensure it's visible
-                        draw_interface()
-                        
-                        if get_yes_no(status_win, "Delete this blow? (y/n)", COLOR_HIGHLIGHT):
-                            del blows[current_pos]
-                            if current_pos >= len(blows):
-                                current_pos = max(0, len(blows) - 1)
-                            changes_made = True
-                
-                if not draw_interface():
-                    break
-                    
-        except curses.error:
-            try:
-                window.erase()
-                window.addstr(0, 0, "Error: Screen too small or display error")
-                window.refresh()
-                window.getch()
-                break
-            except:
-                break
-    
-    # Clean up windows
-    del list_win, detail_win, status_win
-    return changes_made
-
-def edit_monster_flags(window, monster, height, width):
-    """Edit a monster's flags."""
-    # Create windows for the interface first
-    try:
-        list_win = curses.newwin(height - 6, width // 2, 3, 0)
-        detail_win = curses.newwin(height - 6, width // 2, 3, width // 2)
-        status_win = curses.newwin(3, width, height - 3, 0)
-        
-        # Immediately draw a loading message and refresh
-        list_win.addstr(0, 0, "Loading flags...", COLOR_INFO)
-        list_win.refresh()
-        detail_win.refresh()
-        status_win.refresh()
-        window.refresh()  # Ensure the parent window is refreshed too
-    except curses.error:
-        window.addstr(0, 0, "Error: Screen too small for flag editor")
+        window.addstr(0, 0, f"Error loading blow data: {str(e)}")
         window.refresh()
         window.getch()
         return False
     
-    # Get current flags
-    flags = monster.get('flags', [])
+    # Get current blows
+    blows = monster.get('blows', [])
+    if not blows:
+        blows = []
+    
     current_pos = 0
     changes_made = False
     
-    def draw_interface():
-        """Helper function to draw the interface"""
-        try:
-            # Clear all windows
-            list_win.erase()
-            detail_win.erase()
-            status_win.erase()
-            
-            # Show current flags
-            list_win.addstr(0, 0, "Current Flags:", COLOR_HEADER)
-            if flags:
-                for i, flag in enumerate(flags):
-                    if i == current_pos:
-                        list_win.addstr(i + 2, 0, f"> {flag}", curses.A_REVERSE)
-                    else:
-                        list_win.addstr(i + 2, 0, f"  {flag}", COLOR_DEFAULT)
-            else:
-                list_win.addstr(2, 2, "No flags defined", COLOR_DEFAULT)
-            
-            # Show help in detail window
-            detail_win.addstr(0, 0, "Flag Editor Help:", COLOR_HEADER)
-            detail_win.addstr(2, 0, "a: Add new flag", COLOR_INFO)
-            detail_win.addstr(3, 0, "e: Edit selected flag", COLOR_INFO)
-            detail_win.addstr(4, 0, "d: Delete selected flag", COLOR_INFO)
-            detail_win.addstr(5, 0, "Enter: Edit selected flag", COLOR_INFO)
-            detail_win.addstr(6, 0, "j/k: Navigate flags", COLOR_INFO)
-            detail_win.addstr(7, 0, "ESC/q: Return to monster view", COLOR_INFO)
-            
-            # Show status
-            status_win.addstr(0, 0, "=" * (width - 1), COLOR_DEFAULT)
-            status_win.addstr(1, 0, "a:Add  e:Edit  d:Delete  ESC/q:Back", COLOR_INFO)
-            
-            # Refresh each window - use direct refresh instead of noutrefresh/doupdate
-            list_win.refresh()
-            detail_win.refresh()
-            status_win.refresh()
-            window.refresh()  # Ensure the parent window is refreshed too
-            
-            return True
-        except curses.error:
-            try:
-                status_win.erase()
-                status_win.addstr(0, 0, "Error: Screen too small or display error", COLOR_IMPORTANT)
-                status_win.refresh()
-                return False
-            except:
-                return False
-
-    # Initial draw of the interface - use direct refresh calls
-    if not draw_interface():
-        window.getch()
-        del list_win, detail_win, status_win
-        return False
+    # Calculate available space
+    list_height = height - 6  # Reserve space for header and footer
     
-    # Force a refresh of all windows to ensure they're visible
-    curses.doupdate()
-
     while True:
+        window.clear()
+        
+        # Draw header
+        window.addstr(0, 0, "Blow Editor", COLOR_HEADER)
+        window.addstr(1, 0, "=" * (width - 1), COLOR_DEFAULT)
+        
+        # Show current blows
+        window.addstr(2, 0, "Current Blows:", COLOR_INFO)
+        
+        # Calculate visible range based on current position
+        visible_start = max(0, current_pos - (list_height // 2))
+        visible_end = min(len(blows), visible_start + list_height)
+        
+        if blows:
+            for i in range(visible_start, visible_end):
+                y_pos = 3 + (i - visible_start)
+                if i == current_pos:
+                    window.addstr(y_pos, 0, f"> {blows[i]}", curses.A_REVERSE)
+                else:
+                    window.addstr(y_pos, 0, f"  {blows[i]}", COLOR_DEFAULT)
+        else:
+            window.addstr(3, 2, "No blows defined", COLOR_DEFAULT)
+        
+        # Draw footer with commands
+        footer_y = height - 3
+        window.addstr(footer_y, 0, "=" * (width - 1), COLOR_DEFAULT)
+        window.addstr(footer_y + 1, 0, "a:Add  e:Edit  d:Delete  j/k:Navigate  q/ESC:Back", COLOR_INFO)
+        
+        # Refresh window
+        window.refresh()
+        
+        # Get input
         try:
             key = window.getch()
+        except:
+            break
             
-            if key in (ord('q'), 27):  # q or ESC to quit
-                if changes_made:
-                    monster['flags'] = flags
-                break
-                
-            # Handle navigation
-            if key in (ord('j'), ord('k')):
-                new_pos, _ = navigate_list(current_pos, key, flags)
-                if new_pos != current_pos:
-                    current_pos = new_pos
-                    if not draw_interface():
-                        break
+        if key in (ord('q'), 27):  # q or ESC to quit
+            if changes_made:
+                monster['blows'] = blows
+            break
             
-            # Handle Enter key for editing
-            if key in (10, 13):  # Enter
-                if not flags:  # Add new flag if list is empty
-                    key = ord('a')
-                else:  # Edit existing flag
-                    key = ord('e')
+        # Handle navigation
+        if key == ord('j') and current_pos < len(blows) - 1:
+            current_pos += 1
+        elif key == ord('k') and current_pos > 0:
+            current_pos -= 1
             
-            # Handle menu actions
-            action = handle_menu_input(key, 'aed')
-            if action:
-                if action == 'a':  # Add new flag
-                    # Draw interface again before editing to ensure it's visible
-                    draw_interface()
-                    
-                    new_flag = handle_input_editing(
-                        status_win,
-                        width,
-                        prompt="Enter new flag or ESC to cancel:"
-                    )
-                    
-                    if new_flag:
-                        flags.append(new_flag)
-                        current_pos = len(flags) - 1
-                        changes_made = True
-                        
-                elif action == 'e' and flags:  # Edit flag
-                    if current_pos < len(flags):
-                        # Draw interface again before editing to ensure it's visible
-                        draw_interface()
-                        
-                        edited_flag = handle_input_editing(
-                            status_win,
-                            width,
-                            initial_value=flags[current_pos],
-                            prompt="Edit flag or ESC to cancel:"
-                        )
-                        
-                        if edited_flag:
-                            flags[current_pos] = edited_flag
-                            changes_made = True
-                            
-                elif action == 'd' and flags:  # Delete flag
-                    if current_pos < len(flags):
-                        # Draw interface again before confirming to ensure it's visible
-                        draw_interface()
-                        
-                        if get_yes_no(status_win, "Delete this flag? (y/n)", COLOR_HIGHLIGHT):
-                            del flags[current_pos]
-                            if current_pos >= len(flags):
-                                current_pos = max(0, len(flags) - 1)
-                            changes_made = True
-                
-                if not draw_interface():
-                    break
-                    
-        except curses.error:
+        # Handle menu actions
+        if key == ord('a'):  # Add new blow
+            window.addstr(footer_y + 1, 0, "Enter new blow (method effect damage) or ESC to cancel:", COLOR_HIGHLIGHT)
+            window.clrtoeol()
+            window.refresh()
+            
+            curses.echo()
+            curses.curs_set(1)  # Show cursor
+            
             try:
-                window.erase()
-                window.addstr(0, 0, "Error: Screen too small or display error")
-                window.refresh()
-                window.getch()
-                break
+                new_blow = ""
+                # Position cursor at the prompt
+                window.move(footer_y + 1, 55)
+                new_blow = window.getstr(100).decode('utf-8')
             except:
-                break
+                new_blow = ""
+            finally:
+                curses.noecho()
+                curses.curs_set(0)  # Hide cursor
+            
+            if new_blow:
+                parts = new_blow.split()
+                if len(parts) >= 2 and parts[0] in methods and parts[1] in effects:
+                    blows.append(new_blow)
+                    current_pos = len(blows) - 1
+                    changes_made = True
+                else:
+                    window.addstr(footer_y + 1, 0, "Invalid blow format or unknown method/effect", COLOR_IMPORTANT)
+                    window.clrtoeol()
+                    window.refresh()
+                    window.getch()
+                
+        elif key == ord('e') and blows:  # Edit blow
+            if current_pos < len(blows):
+                window.addstr(footer_y + 1, 0, "Edit blow or ESC to cancel:", COLOR_HIGHLIGHT)
+                window.clrtoeol()
+                window.refresh()
+                
+                curses.echo()
+                curses.curs_set(1)  # Show cursor
+                
+                try:
+                    # Position cursor at the prompt and pre-fill with current value
+                    window.addstr(footer_y + 1, 30, blows[current_pos])
+                    window.move(footer_y + 1, 30)
+                    edited_blow = window.getstr(100).decode('utf-8')
+                except:
+                    edited_blow = ""
+                finally:
+                    curses.noecho()
+                    curses.curs_set(0)  # Hide cursor
+                
+                if edited_blow:
+                    parts = edited_blow.split()
+                    if len(parts) >= 2 and parts[0] in methods and parts[1] in effects:
+                        blows[current_pos] = edited_blow
+                        changes_made = True
+                    else:
+                        window.addstr(footer_y + 1, 0, "Invalid blow format or unknown method/effect", COLOR_IMPORTANT)
+                        window.clrtoeol()
+                        window.refresh()
+                        window.getch()
+                
+        elif key == ord('d') and blows:  # Delete blow
+            if current_pos < len(blows):
+                window.addstr(footer_y + 1, 0, "Delete this blow? (y/n)", COLOR_HIGHLIGHT)
+                window.clrtoeol()
+                window.refresh()
+                
+                confirm = window.getch()
+                if confirm in (ord('y'), ord('Y')):
+                    del blows[current_pos]
+                    if current_pos >= len(blows):
+                        current_pos = max(0, len(blows) - 1)
+                    changes_made = True
     
-    # Clean up windows
-    del list_win, detail_win, status_win
+    return changes_made
+
+def edit_monster_flags(window, monster, height, width):
+    """Edit a monster's flags with a simplified interface that works on smaller screens."""
+    # Use a single window approach instead of multiple windows
+    window.clear()
+    window.refresh()
+    
+    # Get current flags
+    flags = monster.get('flags', [])
+    if not flags:
+        flags = []
+    
+    current_pos = 0
+    changes_made = False
+    
+    # Calculate available space
+    list_height = height - 6  # Reserve space for header and footer
+    
+    while True:
+        window.clear()
+        
+        # Draw header
+        window.addstr(0, 0, "Flag Editor", COLOR_HEADER)
+        window.addstr(1, 0, "=" * (width - 1), COLOR_DEFAULT)
+        
+        # Show current flags
+        window.addstr(2, 0, "Current Flags:", COLOR_INFO)
+        
+        # Calculate visible range based on current position
+        visible_start = max(0, current_pos - (list_height // 2))
+        visible_end = min(len(flags), visible_start + list_height)
+        
+        if flags:
+            for i in range(visible_start, visible_end):
+                y_pos = 3 + (i - visible_start)
+                if i == current_pos:
+                    window.addstr(y_pos, 0, f"> {flags[i]}", curses.A_REVERSE)
+                else:
+                    window.addstr(y_pos, 0, f"  {flags[i]}", COLOR_DEFAULT)
+        else:
+            window.addstr(3, 2, "No flags defined", COLOR_DEFAULT)
+        
+        # Draw footer with commands
+        footer_y = height - 3
+        window.addstr(footer_y, 0, "=" * (width - 1), COLOR_DEFAULT)
+        window.addstr(footer_y + 1, 0, "a:Add  e:Edit  d:Delete  j/k:Navigate  q/ESC:Back", COLOR_INFO)
+        
+        # Refresh window
+        window.refresh()
+        
+        # Get input
+        try:
+            key = window.getch()
+        except:
+            break
+            
+        if key in (ord('q'), 27):  # q or ESC to quit
+            if changes_made:
+                monster['flags'] = flags
+            break
+            
+        # Handle navigation
+        if key == ord('j') and current_pos < len(flags) - 1:
+            current_pos += 1
+        elif key == ord('k') and current_pos > 0:
+            current_pos -= 1
+            
+        # Handle Enter key for editing
+        if key in (10, 13):  # Enter
+            if not flags:  # Add new flag if list is empty
+                key = ord('a')
+            else:  # Edit existing flag
+                key = ord('e')
+            
+        # Handle menu actions
+        if key == ord('a'):  # Add new flag
+            window.addstr(footer_y + 1, 0, "Enter new flag or ESC to cancel:", COLOR_HIGHLIGHT)
+            window.clrtoeol()
+            window.refresh()
+            
+            curses.echo()
+            curses.curs_set(1)  # Show cursor
+            
+            try:
+                new_flag = ""
+                # Position cursor at the prompt
+                window.move(footer_y + 1, 35)
+                new_flag = window.getstr(100).decode('utf-8')
+            except:
+                new_flag = ""
+            finally:
+                curses.noecho()
+                curses.curs_set(0)  # Hide cursor
+            
+            if new_flag:
+                flags.append(new_flag)
+                current_pos = len(flags) - 1
+                changes_made = True
+                
+        elif key == ord('e') and flags:  # Edit flag
+            if current_pos < len(flags):
+                window.addstr(footer_y + 1, 0, "Edit flag or ESC to cancel:", COLOR_HIGHLIGHT)
+                window.clrtoeol()
+                window.refresh()
+                
+                curses.echo()
+                curses.curs_set(1)  # Show cursor
+                
+                try:
+                    # Position cursor at the prompt and pre-fill with current value
+                    window.addstr(footer_y + 1, 30, flags[current_pos])
+                    window.move(footer_y + 1, 30)
+                    edited_flag = window.getstr(100).decode('utf-8')
+                except:
+                    edited_flag = ""
+                finally:
+                    curses.noecho()
+                    curses.curs_set(0)  # Hide cursor
+                
+                if edited_flag:
+                    flags[current_pos] = edited_flag
+                    changes_made = True
+                    
+        elif key == ord('d') and flags:  # Delete flag
+            if current_pos < len(flags):
+                window.addstr(footer_y + 1, 0, "Delete this flag? (y/n)", COLOR_HIGHLIGHT)
+                window.clrtoeol()
+                window.refresh()
+                
+                confirm = window.getch()
+                if confirm in (ord('y'), ord('Y')):
+                    del flags[current_pos]
+                    if current_pos >= len(flags):
+                        current_pos = max(0, len(flags) - 1)
+                    changes_made = True
+    
     return changes_made
 
 def main():
