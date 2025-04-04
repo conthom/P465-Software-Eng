@@ -1,20 +1,43 @@
--- Initialize the database.
--- Drop any existing data and create empty tables.
-
-DROP TABLE IF EXISTS user;
-DROP TABLE IF EXISTS post;
-
-CREATE TABLE user (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    nickname TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    joke_balance INTEGER DEFAULT 0,
+    role TEXT DEFAULT 'User'
 );
 
-CREATE TABLE post (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  author_id INTEGER NOT NULL,
-  created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  FOREIGN KEY (author_id) REFERENCES user (id)
+
+CREATE TABLE IF NOT EXISTS jokes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    author_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (author_id) REFERENCES user (id)
+);
+
+CREATE TABLE IF NOT EXISTS jokes_rating (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    joke_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    rating INTEGER CHECK(rating BETWEEN 1 AND 5),
+    FOREIGN KEY (joke_id) REFERENCES joke (id),
+    FOREIGN KEY (user_id) REFERENCES user (id)
+);
+
+CREATE TABLE IF NOT EXISTS jokes_taken (
+    user_id INTEGER NOT NULL,
+    joke_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, joke_id),
+    FOREIGN KEY (user_id) REFERENCES user (id),
+    FOREIGN KEY (joke_id) REFERENCES joke (id)
+);
+
+CREATE TABLE IF NOT EXISTS jokes_viewed (
+    user_id INTEGER NOT NULL,
+    joke_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, joke_id),
+    FOREIGN KEY (user_id) REFERENCES user (id),
+    FOREIGN KEY (joke_id) REFERENCES joke (id)
 );
